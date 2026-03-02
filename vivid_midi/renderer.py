@@ -83,17 +83,15 @@ class Renderer:
         self.plane[:] = self._tmp_fade
         k = self.cfg.deband_blur_k
         if k >= 3 and k % 2 == 1:
-            self.plane[:] = cv2.GaussianBlur(self.plane, (1, k), sigmaX=0.0, sigmaY=0.0)
+            self.plane[:] = cv2.GaussianBlur(self.plane, (3, k), sigmaX=0.0, sigmaY=0.0)
 
     def scroll_and_fade_particles(self):
         self.pplane[:] = 0
 
     def _firework_color(self, vel: int):
-        g = self.vel_gain(vel)
-        hot = np.array([80, 170, 255], dtype=np.float32)
-        cool = np.array([255, 120, 255], dtype=np.float32)
-        mix = 0.35 + 0.65 * g
-        col = np.clip(hot * mix + cool * (1.0 - mix), 0, 255).astype(np.uint8)
+        base = np.array(self.stamp_color_bgr(vel), dtype=np.float32)
+        bloom = np.array([15, 30, 10], dtype=np.float32)
+        col = np.clip(base * 1.08 + bloom, 0, 255).astype(np.uint8)
         return int(col[0]), int(col[1]), int(col[2])
 
     def emit_firework_from_note(self, note: int, vel: int):
@@ -101,24 +99,26 @@ class Renderer:
         x_center = 0.5 * (x0p + x1p)
         y_base = float(self.ph - 2)
         g = self.vel_gain(vel)
-        emit_count = max(8, int(self.cfg.firework_emit_count * (0.7 + g * 1.2)))
+        emit_count = max(6, int(self.cfg.firework_emit_count * (0.75 + g * 0.95)))
         color = self._firework_color(vel)
 
         for _ in range(emit_count):
-            vx = np.random.normal(0.0, self.cfg.firework_emit_vx)
+            vx = np.random.normal(0.0, self.cfg.firework_emit_vx) * (0.55 + 0.35 * g)
             vy = -np.random.uniform(self.cfg.firework_emit_vy_min, self.cfg.firework_emit_vy_max)
             vy *= (0.75 + g * 0.6)
             vy -= abs(np.random.normal(0.0, self.cfg.firework_emit_spread))
             life = np.random.randint(self.cfg.firework_life_min, self.cfg.firework_life_max + 1)
             self.firework_particles.append({
-                "x": x_center + np.random.normal(0.0, 1.2),
+                "x": x_center + np.random.normal(0.0, 0.45),
                 "y": y_base,
+                "px": x_center,
+                "py": y_base,
                 "vx": vx,
                 "vy": vy,
                 "life": life,
                 "max_life": life,
                 "color": color,
-                "size": float(np.random.uniform(1.0, 2.8)),
+                "size": float(np.random.uniform(1.0, 2.2)),
             })
 
     def update_and_draw_fireworks(self):
@@ -127,6 +127,8 @@ class Renderer:
 
         alive_particles = []
         for p in self.firework_particles:
+            p["px"] = p["x"]
+            p["py"] = p["y"]
             p["x"] += p["vx"]
             p["y"] += p["vy"]
             p["vx"] *= self.cfg.firework_drag
@@ -140,8 +142,12 @@ class Renderer:
 
             fade = p["life"] / max(1, p["max_life"])
             bgr = tuple(int(c * fade) for c in p["color"])
-            r = max(1, int(p["size"] * (0.5 + fade)))
-            cv2.circle(self.pplane, (int(p["x"]), int(p["y"])), r, bgr, thickness=-1, lineType=cv2.LINE_AA)
+            x0, y0 = int(p["px"]), int(p["py"])
+            x1, y1 = int(p["x"]), int(p["y"])
+            trail_thickness = 1 if fade < 0.65 else 2
+            cv2.line(self.pplane, (x0, y0), (x1, y1), bgr, thickness=trail_thickness, lineType=cv2.LINE_AA)
+            r = max(1, int(p["size"] * (0.35 + fade)))
+            cv2.circle(self.pplane, (x1, y1), r, bgr, thickness=-1, lineType=cv2.LINE_AA)
             alive_particles.append(p)
 
         self.firework_particles = alive_particles
