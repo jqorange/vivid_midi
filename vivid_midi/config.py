@@ -13,7 +13,7 @@ class RenderConfig:
     speed_px: int = 42
     fade: float = 0.9976
     base_alpha: float = 1.65  # reduce bar brightness
-    show_bars: bool = False
+    show_bars: bool = True
     deband_blur_k: int = 5
 
     stamp_h: int | None = None
@@ -53,11 +53,11 @@ class RenderConfig:
     particle_blur_every: int = 3
     particle_blur_k: int = 5
 
-    firework_emit_count: int = 26
-    firework_emit_spread: float = 2.8
+    firework_emit_count: int = 20
+    firework_emit_spread: float = 1.2
     firework_emit_vy_min: float = 7.0
     firework_emit_vy_max: float = 13.5
-    firework_emit_vx: float = 2.8
+    firework_emit_vx: float = 1.1
     firework_gravity: float = 0.33
     firework_drag: float = 0.985
     firework_life_min: int = 18
