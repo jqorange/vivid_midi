@@ -80,6 +80,9 @@ class Renderer:
         self.plane[-spx:, :, :] = 0
         cv2.convertScaleAbs(self.plane, self._tmp_fade, alpha=self.cfg.fade)
         self.plane[:] = self._tmp_fade
+        k = self.cfg.deband_blur_k
+        if k >= 3 and k % 2 == 1:
+            self.plane[:] = cv2.GaussianBlur(self.plane, (1, k), sigmaX=0.0, sigmaY=0.0)
 
     def scroll_and_fade_particles(self):
         spx = max(1, int(self.cfg.speed_px / max(1, self.cfg.part_speed_div)))
@@ -87,6 +90,9 @@ class Renderer:
         self.pplane[-spx:, :, :] = 0
         cv2.convertScaleAbs(self.pplane, self._tmp_pfade, alpha=self.cfg.part_fade)
         self.pplane[:] = self._tmp_pfade
+        k = self.cfg.deband_blur_k
+        if k >= 3 and k % 2 == 1:
+            self.pplane[:] = cv2.GaussianBlur(self.pplane, (1, k), sigmaX=0.0, sigmaY=0.0)
 
     def draw_note_stamp_at_bottom(self, note: int, vel: int):
         x0, x1 = self.note_to_cell(note)
