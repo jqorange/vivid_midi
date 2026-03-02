@@ -42,15 +42,16 @@ def run():
         apply_events(local_events, cfg.note_min, cfg.note_max)
         held = get_held_notes()
 
-        for note, vel in held:
-            renderer.draw_note_stamp_at_bottom(note, vel)
+        if cfg.show_bars:
+            for note, vel in held:
+                renderer.draw_note_stamp_at_bottom(note, vel)
 
         if cfg.fx_enabled and cfg.particle_fx:
             renderer.scroll_and_fade_particles()
             if cfg.bottom_noise:
                 renderer.add_bottom_noise()
             renderer.add_ambient_fog()
-            renderer.add_note_sparks(held)
+            renderer.add_note_sparks(local_events)
             if cfg.particle_blur_every > 0 and (frame_count % cfg.particle_blur_every == 0):
                 k = cfg.particle_blur_k
                 if k >= 3 and k % 2 == 1:
@@ -59,7 +60,9 @@ def run():
         quad = renderer.get_fly_quad_extended()
         overlay_bars, overlay_particles = renderer.warp_to_frame(frame.shape, quad)
 
-        out = renderer.blend_additive(frame, overlay_bars, cfg.base_alpha)
+        out = frame
+        if cfg.show_bars:
+            out = renderer.blend_additive(out, overlay_bars, cfg.base_alpha)
         if cfg.fx_enabled and cfg.particle_fx:
             out = renderer.blend_additive(out, overlay_particles, cfg.particle_alpha)
         if cfg.fx_enabled and cfg.line_glow and state.fly_quad_base is not None:

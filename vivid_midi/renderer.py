@@ -31,6 +31,7 @@ class Renderer:
 
         self.overlay_bars = None
         self.overlay_particles = None
+        self.firework_particles: list[dict] = []
 
     def enable_gpu_if_available(self):
         cv2.ocl.setUseOpenCL(True)
@@ -85,14 +86,65 @@ class Renderer:
             self.plane[:] = cv2.GaussianBlur(self.plane, (1, k), sigmaX=0.0, sigmaY=0.0)
 
     def scroll_and_fade_particles(self):
-        spx = max(1, int(self.cfg.speed_px / max(1, self.cfg.part_speed_div)))
-        self.pplane[:] = np.roll(self.pplane, -spx, axis=0)
-        self.pplane[-spx:, :, :] = 0
-        cv2.convertScaleAbs(self.pplane, self._tmp_pfade, alpha=self.cfg.part_fade)
-        self.pplane[:] = self._tmp_pfade
-        k = self.cfg.deband_blur_k
-        if k >= 3 and k % 2 == 1:
-            self.pplane[:] = cv2.GaussianBlur(self.pplane, (1, k), sigmaX=0.0, sigmaY=0.0)
+        self.pplane[:] = 0
+
+    def _firework_color(self, vel: int):
+        g = self.vel_gain(vel)
+        hot = np.array([80, 170, 255], dtype=np.float32)
+        cool = np.array([255, 120, 255], dtype=np.float32)
+        mix = 0.35 + 0.65 * g
+        col = np.clip(hot * mix + cool * (1.0 - mix), 0, 255).astype(np.uint8)
+        return int(col[0]), int(col[1]), int(col[2])
+
+    def emit_firework_from_note(self, note: int, vel: int):
+        x0p, x1p = self.particle_note_to_cell(note)
+        x_center = 0.5 * (x0p + x1p)
+        y_base = float(self.ph - 2)
+        g = self.vel_gain(vel)
+        emit_count = max(8, int(self.cfg.firework_emit_count * (0.7 + g * 1.2)))
+        color = self._firework_color(vel)
+
+        for _ in range(emit_count):
+            vx = np.random.normal(0.0, self.cfg.firework_emit_vx)
+            vy = -np.random.uniform(self.cfg.firework_emit_vy_min, self.cfg.firework_emit_vy_max)
+            vy *= (0.75 + g * 0.6)
+            vy -= abs(np.random.normal(0.0, self.cfg.firework_emit_spread))
+            life = np.random.randint(self.cfg.firework_life_min, self.cfg.firework_life_max + 1)
+            self.firework_particles.append({
+                "x": x_center + np.random.normal(0.0, 1.2),
+                "y": y_base,
+                "vx": vx,
+                "vy": vy,
+                "life": life,
+                "max_life": life,
+                "color": color,
+                "size": float(np.random.uniform(1.0, 2.8)),
+            })
+
+    def update_and_draw_fireworks(self):
+        if not self.firework_particles:
+            return
+
+        alive_particles = []
+        for p in self.firework_particles:
+            p["x"] += p["vx"]
+            p["y"] += p["vy"]
+            p["vx"] *= self.cfg.firework_drag
+            p["vy"] += self.cfg.firework_gravity
+            p["life"] -= 1
+
+            if p["life"] <= 0:
+                continue
+            if p["x"] < 0 or p["x"] >= self.pw or p["y"] < 0 or p["y"] >= self.ph:
+                continue
+
+            fade = p["life"] / max(1, p["max_life"])
+            bgr = tuple(int(c * fade) for c in p["color"])
+            r = max(1, int(p["size"] * (0.5 + fade)))
+            cv2.circle(self.pplane, (int(p["x"]), int(p["y"])), r, bgr, thickness=-1, lineType=cv2.LINE_AA)
+            alive_particles.append(p)
+
+        self.firework_particles = alive_particles
 
     def draw_note_stamp_at_bottom(self, note: int, vel: int):
         x0, x1 = self.note_to_cell(note)
@@ -136,23 +188,11 @@ class Renderer:
         p[:, 2] = np.clip(p[:, 2] + int(br * 1.0), 0, 255)
         self.pplane[ys, xs, :] = p.astype(np.uint8)
 
-    def add_note_sparks(self, held_notes):
-        y_base = self.ph - 2
-        for note, vel in held_notes:
-            x0p, x1p = self.particle_note_to_cell(note)
-            xp = x0p if x1p <= x0p else np.random.randint(x0p, x1p + 1)
-            g = self.vel_gain(vel)
-            k = int(self.cfg.note_spark_rate * (0.7 + 2.0 * g))
-            if k <= 0:
-                continue
-            xs = np.random.randint(max(0, xp - self.cfg.spark_x_jitter), min(self.pw, xp + self.cfg.spark_x_jitter + 1), size=k)
-            ys = np.random.randint(max(0, y_base - self.cfg.spark_y_jitter), y_base + 1, size=k)
-            br = int(self.cfg.note_spark_bright * (0.6 + 0.8 * g))
-            p = self.pplane[ys, xs, :].astype(np.int16)
-            p[:, 0] = np.clip(p[:, 0] + br, 0, 255)
-            p[:, 1] = np.clip(p[:, 1] + int(br * 0.8), 0, 255)
-            p[:, 2] = np.clip(p[:, 2] + int(br * 1.0), 0, 255)
-            self.pplane[ys, xs, :] = p.astype(np.uint8)
+    def add_note_sparks(self, midi_events):
+        for event_type, note, vel in midi_events:
+            if event_type == "note_on" and vel > 0:
+                self.emit_firework_from_note(note, vel)
+        self.update_and_draw_fireworks()
 
     def add_bottom_noise(self):
         h = min(self.cfg.bottom_noise_h, self.ph)
