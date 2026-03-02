@@ -13,6 +13,7 @@ class RenderConfig:
     speed_px: int = 42
     fade: float = 0.9976
     base_alpha: float = 1.65  # reduce bar brightness
+    deband_blur_k: int = 5
 
     stamp_h: int | None = None
 
@@ -61,7 +62,7 @@ class RenderConfig:
     spark_x_jitter: int = 2
     spark_y_jitter: int = 6
 
-    bottom_noise: bool = True
+    bottom_noise: bool = False
     bottom_noise_h: int = 14
 
     @property
