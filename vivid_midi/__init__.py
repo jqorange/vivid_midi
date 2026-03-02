@@ -1,0 +1,1 @@
+"""vivid_midi package."""
