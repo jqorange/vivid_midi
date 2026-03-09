@@ -35,8 +35,11 @@ class RenderConfig:
 
     fx_enabled: bool = True
 
-    # Try OpenCL + UMat to leverage mac GPU path when available.
-    use_umat: bool = True
+    # UMat often adds upload/download overhead every frame; keep CPU path by default for smoother FPS.
+    use_umat: bool = False
+
+    # Run expensive debanding blur every N frames (1 = every frame).
+    deband_blur_every: int = 2
 
     line_glow: bool = True
     line_glow_passes: int = 3

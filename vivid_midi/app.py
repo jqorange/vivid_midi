@@ -1,4 +1,5 @@
 import threading
+import time
 
 import cv2
 
@@ -30,6 +31,11 @@ def run():
 
     renderer.start_calibration()
     frame_count = 0
+
+    fps_t0 = time.perf_counter()
+    fps_frames = 0
+    low_fps_hits = 0
+    high_fps_hits = 0
 
     while True:
         ok, frame = cap.read()
@@ -71,6 +77,40 @@ def run():
             renderer.draw_edit_overlay(out)
 
         cv2.imshow(win, out)
+        fps_frames += 1
+        now = time.perf_counter()
+        elapsed = now - fps_t0
+        if elapsed >= 1.0:
+            fps = fps_frames / elapsed
+            fps_t0 = now
+            fps_frames = 0
+
+            if fps < 58.0:
+                low_fps_hits += 1
+                high_fps_hits = 0
+            elif fps > 66.0:
+                high_fps_hits += 1
+                low_fps_hits = 0
+            else:
+                low_fps_hits = 0
+                high_fps_hits = 0
+
+            if low_fps_hits >= 2:
+                # Auto trade tiny quality for smoother frame rate.
+                cfg.deband_blur_every = min(4, cfg.deband_blur_every + 1)
+                cfg.particle_blur_every = min(6, cfg.particle_blur_every + 1)
+                cfg.line_glow_passes = max(1, cfg.line_glow_passes - 1)
+                cfg.firework_emit_count = max(8, int(cfg.firework_emit_count * 0.9))
+                low_fps_hits = 0
+                print(f"[PERF] fps={fps:.1f} -> deband_every={cfg.deband_blur_every}, part_blur_every={cfg.particle_blur_every}, glow_passes={cfg.line_glow_passes}, emit={cfg.firework_emit_count}")
+            elif high_fps_hits >= 3:
+                # Recover quality when sustained headroom exists.
+                cfg.deband_blur_every = max(1, cfg.deband_blur_every - 1)
+                cfg.particle_blur_every = max(2, cfg.particle_blur_every - 1)
+                cfg.line_glow_passes = min(3, cfg.line_glow_passes + 1)
+                cfg.firework_emit_count = min(20, int(cfg.firework_emit_count * 1.08) + 1)
+                high_fps_hits = 0
+
         key = cv2.waitKey(1) & 0xFF
         if key == ord('q'):
             break
