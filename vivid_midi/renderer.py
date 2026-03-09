@@ -29,6 +29,10 @@ class Renderer:
         self._tmp_fade = np.empty_like(self.plane)
         self._tmp_pfade = np.empty_like(self.pplane)
 
+        self._frame_idx = 0
+        self._line_glow_overlay = None
+        self._line_glow_sig = None
+
         self.overlay_bars = None
         self.overlay_particles = None
         self.firework_particles: list[dict] = []
@@ -76,13 +80,20 @@ class Renderer:
         return int(col[0]), int(col[1]), int(col[2])
 
     def scroll_and_fade(self):
-        spx = self.cfg.speed_px
-        self.plane[:] = np.roll(self.plane, -spx, axis=0)
-        self.plane[-spx:, :, :] = 0
+        self._frame_idx += 1
+        spx = int(self.cfg.speed_px)
+        if spx <= 0:
+            return
+        if spx >= self.cfg.plane_h:
+            self.plane.fill(0)
+        else:
+            self.plane[:-spx, :, :] = self.plane[spx:, :, :]
+            self.plane[-spx:, :, :] = 0
         cv2.convertScaleAbs(self.plane, self._tmp_fade, alpha=self.cfg.fade)
         self.plane[:] = self._tmp_fade
         k = self.cfg.deband_blur_k
-        if k >= 3 and k % 2 == 1:
+        blur_every = max(1, int(self.cfg.deband_blur_every))
+        if k >= 3 and k % 2 == 1 and (self._frame_idx % blur_every == 0):
             self.plane[:] = cv2.GaussianBlur(self.plane, (3, k), sigmaX=0.0, sigmaY=0.0)
 
     def scroll_and_fade_particles(self):
@@ -145,9 +156,9 @@ class Renderer:
             x0, y0 = int(p["px"]), int(p["py"])
             x1, y1 = int(p["x"]), int(p["y"])
             trail_thickness = 1 if fade < 0.65 else 2
-            cv2.line(self.pplane, (x0, y0), (x1, y1), bgr, thickness=trail_thickness, lineType=cv2.LINE_AA)
+            cv2.line(self.pplane, (x0, y0), (x1, y1), bgr, thickness=trail_thickness, lineType=cv2.LINE_8)
             r = max(1, int(p["size"] * (0.35 + fade)))
-            cv2.circle(self.pplane, (x1, y1), r, bgr, thickness=-1, lineType=cv2.LINE_AA)
+            cv2.circle(self.pplane, (x1, y1), r, bgr, thickness=-1, lineType=cv2.LINE_8)
             alive_particles.append(p)
 
         self.firework_particles = alive_particles
@@ -256,18 +267,32 @@ class Renderer:
     def blend_additive(frame: np.ndarray, overlay: np.ndarray, alpha: float):
         return cv2.add(frame, cv2.convertScaleAbs(overlay, alpha=alpha))
 
-    def draw_foldline_glow(self, out: np.ndarray):
+    def _build_line_glow_overlay(self, out_shape):
         quad = self.state.fly_quad_base
         if quad is None:
-            return out
+            self._line_glow_overlay = None
+            self._line_glow_sig = None
+            return
+        h, w = out_shape[:2]
+        sig = (tuple(np.round(quad.flatten(), 2)), h, w, self.cfg.line_glow_passes, self.cfg.line_glow_base_thick, self.cfg.line_glow_extra_thick)
+        if sig == self._line_glow_sig and self._line_glow_overlay is not None:
+            return
+        overlay = np.zeros((h, w, 3), dtype=np.uint8)
         L1, R1, R0, L0 = quad.astype(np.int32)
         p0, p1 = (int(L0[0]), int(L0[1])), (int(R0[0]), int(R0[1]))
-        overlay = np.zeros_like(out)
         for i in range(self.cfg.line_glow_passes):
             t = self.cfg.line_glow_base_thick + int((i / max(1, self.cfg.line_glow_passes - 1)) * self.cfg.line_glow_extra_thick)
             cv2.line(overlay, p0, p1, (240, 220, 245), thickness=t, lineType=cv2.LINE_AA)
-        overlay = cv2.GaussianBlur(overlay, (0, 0), sigmaX=5.0, sigmaY=5.0)
-        return self.blend_additive(out, overlay, self.cfg.line_glow_alpha)
+        self._line_glow_overlay = cv2.GaussianBlur(overlay, (0, 0), sigmaX=5.0, sigmaY=5.0)
+        self._line_glow_sig = sig
+
+    def draw_foldline_glow(self, out: np.ndarray):
+        if self.state.fly_quad_base is None:
+            return out
+        self._build_line_glow_overlay(out.shape)
+        if self._line_glow_overlay is None:
+            return out
+        return self.blend_additive(out, self._line_glow_overlay, self.cfg.line_glow_alpha)
 
     def start_calibration(self):
         self.state.calib_mode = True
