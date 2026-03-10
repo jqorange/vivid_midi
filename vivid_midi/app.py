@@ -44,6 +44,7 @@ def run():
             cv2.resizeWindow(cfg.hdmi_window_name, cfg.hdmi_width, cfg.hdmi_height)
 
     renderer.start_calibration()
+    print("[HDMI] Press 'h' to toggle HDMI forwarding.")
     frame_count = 0
 
     fps_t0 = time.perf_counter()
@@ -179,10 +180,16 @@ def run():
         elif key == ord('p'):
             cfg.fx_enabled = not cfg.fx_enabled
             print(f"[FX] FX_ENABLED={cfg.fx_enabled}")
+        elif key in (ord('h'), ord('H')):
+            cfg.hdmi_forward = not cfg.hdmi_forward
+            if not cfg.hdmi_forward:
+                close_hdmi_window()
+            print(f"[HDMI] FORWARD={cfg.hdmi_forward}")
 
         frame_count += 1
 
     cap.release()
+    close_hdmi_window()
     cv2.destroyAllWindows()
 
 
