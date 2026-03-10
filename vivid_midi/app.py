@@ -34,7 +34,15 @@ def run():
 
     win = "Waterfall"
     cv2.namedWindow(win, cv2.WINDOW_NORMAL)
-    cv2.setMouseCallback(win, lambda event, x, y, flags, param: renderer.handle_mouse(event, x, y))
+
+    if cfg.calib_window_enabled:
+        cv2.namedWindow(cfg.calib_window_name, cv2.WINDOW_NORMAL)
+        cv2.resizeWindow(cfg.calib_window_name, cfg.calib_window_width, cfg.calib_window_height)
+
+    mouse_handler = lambda event, x, y, flags, param: renderer.handle_mouse(event, x, y)
+    cv2.setMouseCallback(win, mouse_handler)
+    if cfg.calib_window_enabled:
+        cv2.setMouseCallback(cfg.calib_window_name, mouse_handler)
 
     if cfg.hdmi_forward:
         cv2.namedWindow(cfg.hdmi_window_name, cv2.WINDOW_NORMAL)
@@ -91,6 +99,10 @@ def run():
             renderer.draw_edit_overlay(out)
 
         cv2.imshow(win, out)
+        if cfg.calib_window_enabled:
+            calib_preview = frame.copy()
+            renderer.draw_calibration_overlay(calib_preview)
+            cv2.imshow(cfg.calib_window_name, calib_preview)
         if cfg.hdmi_forward:
             hdmi_out = out
             if out.shape[1] != cfg.hdmi_width or out.shape[0] != cfg.hdmi_height:

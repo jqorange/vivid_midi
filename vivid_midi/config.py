@@ -16,6 +16,13 @@ class RenderConfig:
     hdmi_fullscreen: bool = True
     hdmi_width: int = 1920
     hdmi_height: int = 1080
+
+    # Dedicated local preview window used for point calibration / adjustment.
+    calib_window_enabled: bool = True
+    calib_window_name: str = "Calibration"
+    calib_window_width: int = 1280
+    calib_window_height: int = 720
+
     plane_w: int = 1280
     plane_h: int = 2600
 
