@@ -44,12 +44,20 @@ def run():
     if cfg.calib_window_enabled:
         cv2.setMouseCallback(cfg.calib_window_name, mouse_handler)
 
-    if cfg.hdmi_forward:
+    hdmi_window_ready = False
+
+    def ensure_hdmi_window():
+        nonlocal hdmi_window_ready
+        if not cfg.hdmi_forward or hdmi_window_ready:
+            return
         cv2.namedWindow(cfg.hdmi_window_name, cv2.WINDOW_NORMAL)
         if cfg.hdmi_fullscreen:
             cv2.setWindowProperty(cfg.hdmi_window_name, cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
         else:
             cv2.resizeWindow(cfg.hdmi_window_name, cfg.hdmi_width, cfg.hdmi_height)
+        hdmi_window_ready = True
+
+    if cfg.hdmi_forward:
         print("[HDMI] Calibrate first, then press TAB to start forwarding.")
 
     renderer.start_calibration()
@@ -162,10 +170,16 @@ def run():
                 print("[EDIT] OFF")
         elif key == ord('c'):
             state.hdmi_forward_active = False
+            if hdmi_window_ready:
+                cv2.destroyWindow(cfg.hdmi_window_name)
+                hdmi_window_ready = False
             renderer.start_calibration()
             print("[HDMI] Forward paused. Re-calibrate, then press TAB to resume.")
         elif key == ord('r'):
             state.hdmi_forward_active = False
+            if hdmi_window_ready:
+                cv2.destroyWindow(cfg.hdmi_window_name)
+                hdmi_window_ready = False
             renderer.reset_calibration()
             renderer.start_calibration()
             print("[HDMI] Forward paused. Re-calibrate, then press TAB to resume.")
@@ -176,6 +190,11 @@ def run():
                 print("[HDMI] Need calibration first. Complete calibration, then press TAB.")
             else:
                 state.hdmi_forward_active = not state.hdmi_forward_active
+                if state.hdmi_forward_active:
+                    ensure_hdmi_window()
+                elif hdmi_window_ready:
+                    cv2.destroyWindow(cfg.hdmi_window_name)
+                    hdmi_window_ready = False
                 print(f"[HDMI] Forward {'ON' if state.hdmi_forward_active else 'OFF'}")
         elif key == ord('['):
             cfg.extend_scale = max(cfg.extend_min, cfg.extend_scale - cfg.extend_step)
