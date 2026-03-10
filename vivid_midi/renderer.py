@@ -341,6 +341,28 @@ class Renderer:
         self.state.hover_idx = -1
         print("[CALIB] Reset.")
 
+    def draw_calibration_overlay(self, img: np.ndarray):
+        if self.state.calib_mode:
+            h, w = img.shape[:2]
+            step = max(40, min(h, w) // 12)
+            for x in range(step, w, step):
+                cv2.line(img, (x, 0), (x, h - 1), (40, 40, 40), 1)
+            for y in range(step, h, step):
+                cv2.line(img, (0, y), (w - 1, y), (40, 40, 40), 1)
+
+            next_idx = len(self.state.calib_points)
+            help_text = "Click 4 points: L0 -> R0 -> L1 -> R1"
+            cv2.putText(img, help_text, (20, 34), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 220, 255), 2)
+            if next_idx < 4:
+                cv2.putText(img, f"Next: {CALIB_LABELS[next_idx]}", (20, 66), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 220, 255), 2)
+
+            for i, (x, y) in enumerate(self.state.calib_points):
+                cv2.drawMarker(img, (int(x), int(y)), (0, 255, 0), markerType=cv2.MARKER_CROSS, markerSize=18, thickness=2)
+                cv2.putText(img, CALIB_LABELS[i], (int(x) + 10, int(y) - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (0, 255, 0), 2)
+
+        if self.state.fly_quad_base is not None:
+            self.draw_edit_overlay(img)
+
     def pick_handle(self, pt: np.ndarray):
         quad = self.state.fly_quad_base
         best_i, best_d = -1, 1e18
