@@ -19,17 +19,45 @@ def run():
     th.start()
     print(f"\nListening MIDI from: {port}")
 
-    cap = cv2.VideoCapture(cfg.cam_index)
+    cap = cv2.VideoCapture(cfg.cam_index, cv2.CAP_ANY)
+    cap.set(cv2.CAP_PROP_BUFFERSIZE, cfg.cam_buffer_size)
+    cap.set(cv2.CAP_PROP_FRAME_WIDTH, cfg.cam_width)
+    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, cfg.cam_height)
+    cap.set(cv2.CAP_PROP_FPS, cfg.cam_fps)
+    if cfg.cam_use_mjpg:
+        cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*"MJPG"))
+
     ok, _ = cap.read()
     if not ok:
         print("Camera read failed.")
         return
 
     win = "Waterfall"
-    cv2.namedWindow(win)
+    cv2.namedWindow(win, cv2.WINDOW_NORMAL)
     cv2.setMouseCallback(win, lambda event, x, y, flags, param: renderer.handle_mouse(event, x, y))
 
+    hdmi_window_created = False
+
+    def ensure_hdmi_window():
+        nonlocal hdmi_window_created
+        if hdmi_window_created:
+            return
+        cv2.namedWindow(cfg.hdmi_window_name, cv2.WINDOW_NORMAL)
+        if cfg.hdmi_fullscreen:
+            cv2.setWindowProperty(cfg.hdmi_window_name, cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
+        else:
+            cv2.resizeWindow(cfg.hdmi_window_name, cfg.hdmi_width, cfg.hdmi_height)
+        hdmi_window_created = True
+
+    def close_hdmi_window():
+        nonlocal hdmi_window_created
+        if not hdmi_window_created:
+            return
+        cv2.destroyWindow(cfg.hdmi_window_name)
+        hdmi_window_created = False
+
     renderer.start_calibration()
+    print("[HDMI] Press 'h' to toggle HDMI forwarding.")
     frame_count = 0
 
     fps_t0 = time.perf_counter()
@@ -68,15 +96,25 @@ def run():
 
         out = frame
         if cfg.show_bars:
-            out = renderer.blend_additive(out, overlay_bars, cfg.base_alpha)
+            out = renderer.blend_additive_inplace(out, overlay_bars, cfg.base_alpha, renderer.overlay_bars_scaled)
         if cfg.fx_enabled and cfg.particle_fx:
-            out = renderer.blend_additive(out, overlay_particles, cfg.particle_alpha)
+            out = renderer.blend_additive_inplace(out, overlay_particles, cfg.particle_alpha, renderer.overlay_particles_scaled)
         if cfg.fx_enabled and cfg.line_glow and state.fly_quad_base is not None:
             out = renderer.draw_foldline_glow(out)
         if cfg.edit_mode and state.fly_quad_base is not None:
             renderer.draw_edit_overlay(out)
 
         cv2.imshow(win, out)
+
+        hdmi_active = cfg.hdmi_forward and (cfg.hdmi_show_during_calibration or not state.calib_mode)
+        if hdmi_active:
+            ensure_hdmi_window()
+            hdmi_out = out
+            if out.shape[1] != cfg.hdmi_width or out.shape[0] != cfg.hdmi_height:
+                hdmi_out = cv2.resize(out, (cfg.hdmi_width, cfg.hdmi_height), interpolation=cv2.INTER_LINEAR)
+            cv2.imshow(cfg.hdmi_window_name, hdmi_out)
+        else:
+            close_hdmi_window()
         fps_frames += 1
         now = time.perf_counter()
         elapsed = now - fps_t0
@@ -160,10 +198,16 @@ def run():
         elif key == ord('p'):
             cfg.fx_enabled = not cfg.fx_enabled
             print(f"[FX] FX_ENABLED={cfg.fx_enabled}")
+        elif key in (ord('h'), ord('H')):
+            cfg.hdmi_forward = not cfg.hdmi_forward
+            if not cfg.hdmi_forward:
+                close_hdmi_window()
+            print(f"[HDMI] FORWARD={cfg.hdmi_forward}")
 
         frame_count += 1
 
     cap.release()
+    close_hdmi_window()
     cv2.destroyAllWindows()
 
 

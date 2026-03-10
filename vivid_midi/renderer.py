@@ -35,7 +35,14 @@ class Renderer:
 
         self.overlay_bars = None
         self.overlay_particles = None
+        self.overlay_bars_scaled = None
+        self.overlay_particles_scaled = None
         self.firework_particles: list[dict] = []
+
+        self._note_cells = [self._compute_note_cell(n) for n in range(self.cfg.note_min, self.cfg.note_max + 1)]
+        self._stamp_color_lut = [self._calc_stamp_color_bgr(v) for v in range(128)]
+        self._glow_color_lut = [self._calc_glow_color_bgr(v) for v in range(128)]
+        self._firework_color_lut = [self._calc_firework_color(v) for v in range(128)]
 
     def enable_gpu_if_available(self):
         cv2.ocl.setUseOpenCL(True)
@@ -48,8 +55,10 @@ class Renderer:
         if self.overlay_bars is None or self.overlay_bars.shape[:2] != (h, w):
             self.overlay_bars = np.zeros((h, w, 3), dtype=np.uint8)
             self.overlay_particles = np.zeros((h, w, 3), dtype=np.uint8)
+            self.overlay_bars_scaled = np.zeros((h, w, 3), dtype=np.uint8)
+            self.overlay_particles_scaled = np.zeros((h, w, 3), dtype=np.uint8)
 
-    def note_to_cell(self, note: int):
+    def _compute_note_cell(self, note: int):
         note = int(max(self.cfg.note_min, min(self.cfg.note_max, note)))
         i = note - self.cfg.note_min
         x0 = int(np.floor(i * self.key_w))
@@ -60,24 +69,34 @@ class Renderer:
             x1 = x0
         return x0, x1
 
+    def note_to_cell(self, note: int):
+        note = int(max(self.cfg.note_min, min(self.cfg.note_max, note)))
+        return self._note_cells[note - self.cfg.note_min]
+
     @staticmethod
     def vel_gain(vel: int) -> float:
         v = np.clip(vel / 127.0, 0.0, 1.0)
         return float(v ** 0.30)
 
-    def stamp_color_bgr(self, vel: int):
+    def _calc_stamp_color_bgr(self, vel: int):
         g = self.vel_gain(vel)
         base = np.array([210, 80, 255], dtype=np.float32)
         bright = 0.48 + 0.78 * g
         col = np.clip(base * bright, 0, 255).astype(np.uint8)
         return int(col[0]), int(col[1]), int(col[2])
 
-    def glow_color_bgr(self, vel: int):
+    def stamp_color_bgr(self, vel: int):
+        return self._stamp_color_lut[int(np.clip(vel, 0, 127))]
+
+    def _calc_glow_color_bgr(self, vel: int):
         g = self.vel_gain(vel)
         base = np.array([255, 180, 255], dtype=np.float32)
         bright = 0.12 + 0.52 * g
         col = np.clip(base * bright, 0, 255).astype(np.uint8)
         return int(col[0]), int(col[1]), int(col[2])
+
+    def glow_color_bgr(self, vel: int):
+        return self._glow_color_lut[int(np.clip(vel, 0, 127))]
 
     def scroll_and_fade(self):
         self._frame_idx += 1
@@ -99,11 +118,14 @@ class Renderer:
     def scroll_and_fade_particles(self):
         self.pplane[:] = 0
 
-    def _firework_color(self, vel: int):
-        base = np.array(self.stamp_color_bgr(vel), dtype=np.float32)
+    def _calc_firework_color(self, vel: int):
+        base = np.array(self._calc_stamp_color_bgr(vel), dtype=np.float32)
         bloom = np.array([15, 30, 10], dtype=np.float32)
         col = np.clip(base * 1.08 + bloom, 0, 255).astype(np.uint8)
         return int(col[0]), int(col[1]), int(col[2])
+
+    def _firework_color(self, vel: int):
+        return self._firework_color_lut[int(np.clip(vel, 0, 127))]
 
     def emit_firework_from_note(self, note: int, vel: int):
         x0p, x1p = self.particle_note_to_cell(note)
@@ -242,9 +264,9 @@ class Renderer:
 
     def warp_to_frame(self, frame_shape, quad):
         self.ensure_overlays(frame_shape)
-        self.overlay_bars.fill(0)
-        self.overlay_particles.fill(0)
         if quad is None:
+            self.overlay_bars.fill(0)
+            self.overlay_particles.fill(0)
             return self.overlay_bars, self.overlay_particles
 
         self._ensure_homography(quad)
@@ -266,6 +288,12 @@ class Renderer:
     @staticmethod
     def blend_additive(frame: np.ndarray, overlay: np.ndarray, alpha: float):
         return cv2.add(frame, cv2.convertScaleAbs(overlay, alpha=alpha))
+
+    @staticmethod
+    def blend_additive_inplace(frame: np.ndarray, overlay: np.ndarray, alpha: float, buffer: np.ndarray):
+        cv2.convertScaleAbs(overlay, dst=buffer, alpha=alpha)
+        cv2.add(frame, buffer, dst=frame)
+        return frame
 
     def _build_line_glow_overlay(self, out_shape):
         quad = self.state.fly_quad_base
