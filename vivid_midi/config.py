@@ -4,6 +4,18 @@ from dataclasses import dataclass
 @dataclass
 class RenderConfig:
     cam_index: int = 0
+    cam_width: int = 1920
+    cam_height: int = 1080
+    cam_fps: int = 60
+    cam_buffer_size: int = 1
+    cam_use_mjpg: bool = True
+
+    # Mirror final frame to a dedicated full-screen window (typically moved to HDMI out).
+    hdmi_forward: bool = True
+    hdmi_window_name: str = "HDMI Forward"
+    hdmi_fullscreen: bool = True
+    hdmi_width: int = 1920
+    hdmi_height: int = 1080
     plane_w: int = 1280
     plane_h: int = 2600
 
