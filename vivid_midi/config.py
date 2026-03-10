@@ -110,6 +110,7 @@ class RuntimeState:
     fly_quad_base: object | None = None
     hover_idx: int = -1
     selected_idx: int = -1
+    hdmi_forward_active: bool = False
 
     def __post_init__(self):
         if self.calib_points is None:

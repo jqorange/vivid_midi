@@ -50,6 +50,7 @@ def run():
             cv2.setWindowProperty(cfg.hdmi_window_name, cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
         else:
             cv2.resizeWindow(cfg.hdmi_window_name, cfg.hdmi_width, cfg.hdmi_height)
+        print("[HDMI] Calibrate first, then press TAB to start forwarding.")
 
     renderer.start_calibration()
     frame_count = 0
@@ -103,7 +104,7 @@ def run():
             calib_preview = frame.copy()
             renderer.draw_calibration_overlay(calib_preview)
             cv2.imshow(cfg.calib_window_name, calib_preview)
-        if cfg.hdmi_forward:
+        if cfg.hdmi_forward and state.hdmi_forward_active:
             hdmi_out = out
             if out.shape[1] != cfg.hdmi_width or out.shape[0] != cfg.hdmi_height:
                 hdmi_out = cv2.resize(out, (cfg.hdmi_width, cfg.hdmi_height), interpolation=cv2.INTER_LINEAR)
@@ -160,10 +161,22 @@ def run():
                 state.selected_idx = -1
                 print("[EDIT] OFF")
         elif key == ord('c'):
+            state.hdmi_forward_active = False
             renderer.start_calibration()
+            print("[HDMI] Forward paused. Re-calibrate, then press TAB to resume.")
         elif key == ord('r'):
+            state.hdmi_forward_active = False
             renderer.reset_calibration()
             renderer.start_calibration()
+            print("[HDMI] Forward paused. Re-calibrate, then press TAB to resume.")
+        elif key == 9:
+            if not cfg.hdmi_forward:
+                print("[HDMI] Forward is disabled in config.")
+            elif state.fly_quad_base is None:
+                print("[HDMI] Need calibration first. Complete calibration, then press TAB.")
+            else:
+                state.hdmi_forward_active = not state.hdmi_forward_active
+                print(f"[HDMI] Forward {'ON' if state.hdmi_forward_active else 'OFF'}")
         elif key == ord('['):
             cfg.extend_scale = max(cfg.extend_min, cfg.extend_scale - cfg.extend_step)
             print(f"[TUNE] EXTEND_SCALE={cfg.extend_scale:.2f}")
