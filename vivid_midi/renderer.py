@@ -1,5 +1,6 @@
 import cv2
 import numpy as np
+import sys
 
 from .config import RenderConfig, RuntimeState
 
@@ -45,6 +46,13 @@ class Renderer:
         self._firework_color_lut = [self._calc_firework_color(v) for v in range(128)]
 
     def enable_gpu_if_available(self):
+        if sys.platform == "darwin":
+            # On macOS, OpenCL + multi-window imshow can cause blank/black windows on some GPUs/displays.
+            cv2.ocl.setUseOpenCL(False)
+            has_ocl = cv2.ocl.haveOpenCL()
+            active_ocl = cv2.ocl.useOpenCL()
+            print(f"[GPU] macOS detected, forcing OpenCL OFF (available={has_ocl}, enabled={active_ocl})")
+            return
         cv2.ocl.setUseOpenCL(True)
         has_ocl = cv2.ocl.haveOpenCL()
         active_ocl = cv2.ocl.useOpenCL()

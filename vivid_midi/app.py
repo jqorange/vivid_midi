@@ -1,5 +1,6 @@
 import threading
 import time
+import sys
 
 import cv2
 
@@ -51,9 +52,11 @@ def run():
         if not cfg.hdmi_forward or hdmi_window_ready:
             return
         cv2.namedWindow(cfg.hdmi_window_name, cv2.WINDOW_NORMAL)
-        if cfg.hdmi_fullscreen:
+        if cfg.hdmi_fullscreen and sys.platform != "darwin":
             cv2.setWindowProperty(cfg.hdmi_window_name, cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
         else:
+            if cfg.hdmi_fullscreen and sys.platform == "darwin":
+                print("[HDMI] macOS detected: using windowed HDMI output (fullscreen may cause black screen).")
             cv2.resizeWindow(cfg.hdmi_window_name, cfg.hdmi_width, cfg.hdmi_height)
         hdmi_window_ready = True
 
@@ -113,7 +116,7 @@ def run():
             renderer.draw_calibration_overlay(calib_preview)
             cv2.imshow(cfg.calib_window_name, calib_preview)
         if cfg.hdmi_forward and state.hdmi_forward_active:
-            hdmi_out = out
+            hdmi_out = out.copy()
             if out.shape[1] != cfg.hdmi_width or out.shape[0] != cfg.hdmi_height:
                 hdmi_out = cv2.resize(out, (cfg.hdmi_width, cfg.hdmi_height), interpolation=cv2.INTER_LINEAR)
             cv2.imshow(cfg.hdmi_window_name, hdmi_out)
