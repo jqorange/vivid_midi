@@ -14,7 +14,6 @@ class RenderConfig:
     hdmi_forward: bool = True
     hdmi_window_name: str = "HDMI Forward"
     hdmi_fullscreen: bool = True
-    hdmi_show_during_calibration: bool = False
     hdmi_width: int = 1920
     hdmi_height: int = 1080
     plane_w: int = 1280

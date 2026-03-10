@@ -36,25 +36,12 @@ def run():
     cv2.namedWindow(win, cv2.WINDOW_NORMAL)
     cv2.setMouseCallback(win, lambda event, x, y, flags, param: renderer.handle_mouse(event, x, y))
 
-    hdmi_window_created = False
-
-    def ensure_hdmi_window():
-        nonlocal hdmi_window_created
-        if hdmi_window_created:
-            return
+    if cfg.hdmi_forward:
         cv2.namedWindow(cfg.hdmi_window_name, cv2.WINDOW_NORMAL)
         if cfg.hdmi_fullscreen:
             cv2.setWindowProperty(cfg.hdmi_window_name, cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
         else:
             cv2.resizeWindow(cfg.hdmi_window_name, cfg.hdmi_width, cfg.hdmi_height)
-        hdmi_window_created = True
-
-    def close_hdmi_window():
-        nonlocal hdmi_window_created
-        if not hdmi_window_created:
-            return
-        cv2.destroyWindow(cfg.hdmi_window_name)
-        hdmi_window_created = False
 
     renderer.start_calibration()
     print("[HDMI] Press 'h' to toggle HDMI forwarding.")
@@ -105,16 +92,11 @@ def run():
             renderer.draw_edit_overlay(out)
 
         cv2.imshow(win, out)
-
-        hdmi_active = cfg.hdmi_forward and (cfg.hdmi_show_during_calibration or not state.calib_mode)
-        if hdmi_active:
-            ensure_hdmi_window()
+        if cfg.hdmi_forward:
             hdmi_out = out
             if out.shape[1] != cfg.hdmi_width or out.shape[0] != cfg.hdmi_height:
                 hdmi_out = cv2.resize(out, (cfg.hdmi_width, cfg.hdmi_height), interpolation=cv2.INTER_LINEAR)
             cv2.imshow(cfg.hdmi_window_name, hdmi_out)
-        else:
-            close_hdmi_window()
         fps_frames += 1
         now = time.perf_counter()
         elapsed = now - fps_t0
