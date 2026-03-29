@@ -359,7 +359,7 @@ class Renderer:
                 cv2.line(img, (0, y), (w - 1, y), (40, 40, 40), 1)
 
             next_idx = len(self.state.calib_points)
-            help_text = "Click 4 points: L0 -> R0 -> L1 -> R1"
+            help_text = "Press A to calibrate; click 4 points"
             cv2.putText(img, help_text, (20, 34), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 220, 255), 2)
             if next_idx < 4:
                 cv2.putText(img, f"Next: {CALIB_LABELS[next_idx]}", (20, 66), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 220, 255), 2)
@@ -425,5 +425,8 @@ class Renderer:
                     R1 = np.float32(self.state.calib_points[3])
                     self.state.fly_quad_base = np.float32([L1, R1, R0, L0])
                     self.state.calib_mode = False
+                    self.cfg.edit_mode = True
+                    self.state.selected_idx = -1
+                    self.state.hover_idx = -1
                     self._last_quad_sig = None
-                    print("[CALIB] Completed fly-out plane calibration.")
+                    print("[CALIB] Completed. [EDIT] ON (drag points, press F to hide yellow box)")

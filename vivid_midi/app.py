@@ -1,6 +1,5 @@
 import threading
 import time
-import sys
 
 import cv2
 
@@ -36,34 +35,9 @@ def run():
     win = "Waterfall"
     cv2.namedWindow(win, cv2.WINDOW_NORMAL)
 
-    if cfg.calib_window_enabled:
-        cv2.namedWindow(cfg.calib_window_name, cv2.WINDOW_NORMAL)
-        cv2.resizeWindow(cfg.calib_window_name, cfg.calib_window_width, cfg.calib_window_height)
-
     mouse_handler = lambda event, x, y, flags, param: renderer.handle_mouse(event, x, y)
     cv2.setMouseCallback(win, mouse_handler)
-    if cfg.calib_window_enabled:
-        cv2.setMouseCallback(cfg.calib_window_name, mouse_handler)
-
-    hdmi_window_ready = False
-
-    def ensure_hdmi_window():
-        nonlocal hdmi_window_ready
-        if not cfg.hdmi_forward or hdmi_window_ready:
-            return
-        cv2.namedWindow(cfg.hdmi_window_name, cv2.WINDOW_NORMAL)
-        if cfg.hdmi_fullscreen and sys.platform != "darwin":
-            cv2.setWindowProperty(cfg.hdmi_window_name, cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
-        else:
-            if cfg.hdmi_fullscreen and sys.platform == "darwin":
-                print("[HDMI] macOS detected: using windowed HDMI output (fullscreen may cause black screen).")
-            cv2.resizeWindow(cfg.hdmi_window_name, cfg.hdmi_width, cfg.hdmi_height)
-        hdmi_window_ready = True
-
-    if cfg.hdmi_forward:
-        print("[HDMI] Calibrate first, then press TAB to start forwarding.")
-
-    renderer.start_calibration()
+    print("[CTRL] Press A to calibrate. After 4 points you can drag handles. Press F to hide yellow box.")
     frame_count = 0
 
     fps_t0 = time.perf_counter()
@@ -110,16 +84,8 @@ def run():
         if cfg.edit_mode and state.fly_quad_base is not None:
             renderer.draw_edit_overlay(out)
 
+        renderer.draw_calibration_overlay(out)
         cv2.imshow(win, out)
-        if cfg.calib_window_enabled:
-            calib_preview = frame.copy()
-            renderer.draw_calibration_overlay(calib_preview)
-            cv2.imshow(cfg.calib_window_name, calib_preview)
-        if cfg.hdmi_forward and state.hdmi_forward_active:
-            hdmi_out = out.copy()
-            if out.shape[1] != cfg.hdmi_width or out.shape[0] != cfg.hdmi_height:
-                hdmi_out = cv2.resize(out, (cfg.hdmi_width, cfg.hdmi_height), interpolation=cv2.INTER_LINEAR)
-            cv2.imshow(cfg.hdmi_window_name, hdmi_out)
         fps_frames += 1
         now = time.perf_counter()
         elapsed = now - fps_t0
@@ -158,13 +124,10 @@ def run():
         if key == ord('q'):
             break
         if key == ord('a'):
-            if state.fly_quad_base is None:
-                print("[EDIT] Need calibration first.")
-            else:
-                cfg.edit_mode = True
-                state.hover_idx = -1
-                state.selected_idx = -1
-                print("[EDIT] ON")
+            cfg.edit_mode = False
+            state.hover_idx = -1
+            state.selected_idx = -1
+            renderer.start_calibration()
         elif key in (ord('f'), ord('F')):
             if cfg.edit_mode:
                 cfg.edit_mode = False
@@ -172,33 +135,10 @@ def run():
                 state.selected_idx = -1
                 print("[EDIT] OFF")
         elif key == ord('c'):
-            state.hdmi_forward_active = False
-            if hdmi_window_ready:
-                cv2.destroyWindow(cfg.hdmi_window_name)
-                hdmi_window_ready = False
             renderer.start_calibration()
-            print("[HDMI] Forward paused. Re-calibrate, then press TAB to resume.")
         elif key == ord('r'):
-            state.hdmi_forward_active = False
-            if hdmi_window_ready:
-                cv2.destroyWindow(cfg.hdmi_window_name)
-                hdmi_window_ready = False
             renderer.reset_calibration()
-            renderer.start_calibration()
-            print("[HDMI] Forward paused. Re-calibrate, then press TAB to resume.")
-        elif key == 9:
-            if not cfg.hdmi_forward:
-                print("[HDMI] Forward is disabled in config.")
-            elif state.fly_quad_base is None:
-                print("[HDMI] Need calibration first. Complete calibration, then press TAB.")
-            else:
-                state.hdmi_forward_active = not state.hdmi_forward_active
-                if state.hdmi_forward_active:
-                    ensure_hdmi_window()
-                elif hdmi_window_ready:
-                    cv2.destroyWindow(cfg.hdmi_window_name)
-                    hdmi_window_ready = False
-                print(f"[HDMI] Forward {'ON' if state.hdmi_forward_active else 'OFF'}")
+            print("[CALIB] Cleared.")
         elif key == ord('['):
             cfg.extend_scale = max(cfg.extend_min, cfg.extend_scale - cfg.extend_step)
             print(f"[TUNE] EXTEND_SCALE={cfg.extend_scale:.2f}")
