@@ -340,6 +340,20 @@ class Renderer:
         for i, lab in enumerate(CALIB_LABELS, 1):
             print(f"  {i}) {lab}")
 
+    def finish_calibration(self):
+        if len(self.state.calib_points) < 4:
+            print(f"[CALIB] Need 4 points, current={len(self.state.calib_points)}")
+            return False
+        L0 = np.float32(self.state.calib_points[0])
+        R0 = np.float32(self.state.calib_points[1])
+        L1 = np.float32(self.state.calib_points[2])
+        R1 = np.float32(self.state.calib_points[3])
+        self.state.fly_quad_base = np.float32([L1, R1, R0, L0])
+        self.state.calib_mode = False
+        self._last_quad_sig = None
+        print("[CALIB] Completed fly-out plane calibration.")
+        return True
+
     def reset_calibration(self):
         self.state.calib_mode = False
         self.state.calib_points = []
@@ -359,7 +373,7 @@ class Renderer:
                 cv2.line(img, (0, y), (w - 1, y), (40, 40, 40), 1)
 
             next_idx = len(self.state.calib_points)
-            help_text = "Click 4 points: L0 -> R0 -> L1 -> R1"
+            help_text = "Hold A to calibrate; click 4 points; hold F to finish"
             cv2.putText(img, help_text, (20, 34), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 220, 255), 2)
             if next_idx < 4:
                 cv2.putText(img, f"Next: {CALIB_LABELS[next_idx]}", (20, 66), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 220, 255), 2)
@@ -418,12 +432,3 @@ class Renderer:
             if idx < 4:
                 print(f"[CALIB] {CALIB_LABELS[idx]} = ({x}, {y})")
                 self.state.calib_points.append((x, y))
-                if len(self.state.calib_points) == 4:
-                    L0 = np.float32(self.state.calib_points[0])
-                    R0 = np.float32(self.state.calib_points[1])
-                    L1 = np.float32(self.state.calib_points[2])
-                    R1 = np.float32(self.state.calib_points[3])
-                    self.state.fly_quad_base = np.float32([L1, R1, R0, L0])
-                    self.state.calib_mode = False
-                    self._last_quad_sig = None
-                    print("[CALIB] Completed fly-out plane calibration.")
