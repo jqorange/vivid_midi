@@ -368,7 +368,7 @@ class Renderer:
                 cv2.drawMarker(img, (int(x), int(y)), (0, 255, 0), markerType=cv2.MARKER_CROSS, markerSize=18, thickness=2)
                 cv2.putText(img, CALIB_LABELS[i], (int(x) + 10, int(y) - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (0, 255, 0), 2)
 
-        if self.state.fly_quad_base is not None:
+        if self.cfg.edit_mode and self.state.fly_quad_base is not None:
             self.draw_edit_overlay(img)
 
     def pick_handle(self, pt: np.ndarray):
