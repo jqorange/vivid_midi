@@ -1,14 +1,17 @@
+import os
 from dataclasses import dataclass
 
 
 @dataclass
 class RenderConfig:
     cam_index: int = 0
-    cam_width: int = 1920
-    cam_height: int = 1080
+    cam_width: int = 3840
+    cam_height: int = 2160
     cam_fps: int = 60
     cam_buffer_size: int = 1
-    cam_use_mjpg: bool = True
+    cam_use_mjpg: bool = False
+    cam_force_native_backend: bool = True
+    lock_max_quality: bool = True
 
     # Mirror final frame to a dedicated full-screen window (typically moved to HDMI out).
     hdmi_forward: bool = False
@@ -58,10 +61,10 @@ class RenderConfig:
     use_umat: bool = False
 
     # Run expensive debanding blur every N frames (1 = every frame).
-    deband_blur_every: int = 2
+    deband_blur_every: int = 1
 
     line_glow: bool = True
-    line_glow_passes: int = 3
+    line_glow_passes: int = 4
     line_glow_base_thick: int = 2
     line_glow_extra_thick: int = 10
     line_glow_alpha: float = 0.68
@@ -72,8 +75,11 @@ class RenderConfig:
     part_speed_div: int = 2
 
     particle_alpha: float = 1.55
-    particle_blur_every: int = 3
+    particle_blur_every: int = 1
     particle_blur_k: int = 5
+
+    # Let OpenCV use all available CPU cores by default.
+    opencv_threads: int = max(1, (os.cpu_count() or 4))
 
     firework_emit_count: int = 20
     firework_emit_spread: float = 1.2
