@@ -67,7 +67,7 @@ class RenderConfig:
     line_glow_passes: int = 4
     line_glow_base_thick: int = 2
     line_glow_extra_thick: int = 10
-    line_glow_alpha: float = 0.68
+    line_glow_alpha: float = 0.42
 
     particle_fx: bool = True
     part_scale: int = 2

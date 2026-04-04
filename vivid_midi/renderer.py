@@ -318,7 +318,7 @@ class Renderer:
         p0, p1 = (int(L0[0]), int(L0[1])), (int(R0[0]), int(R0[1]))
         for i in range(self.cfg.line_glow_passes):
             t = self.cfg.line_glow_base_thick + int((i / max(1, self.cfg.line_glow_passes - 1)) * self.cfg.line_glow_extra_thick)
-            cv2.line(overlay, p0, p1, (240, 220, 245), thickness=t, lineType=cv2.LINE_AA)
+            cv2.line(overlay, p0, p1, (248, 244, 252), thickness=t, lineType=cv2.LINE_AA)
         self._line_glow_overlay = cv2.GaussianBlur(overlay, (0, 0), sigmaX=5.0, sigmaY=5.0)
         self._line_glow_sig = sig
 
