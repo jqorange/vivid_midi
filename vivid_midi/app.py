@@ -1,3 +1,4 @@
+import sys
 import threading
 import time
 
@@ -8,18 +9,39 @@ from .midi import apply_events, choose_midi_port, drain_events, get_held_notes, 
 from .renderer import Renderer
 
 
-def run():
-    cfg = RenderConfig()
-    state = RuntimeState()
-    renderer = Renderer(cfg, state)
-    renderer.enable_gpu_if_available()
+class LatestFrameBuffer:
+    def __init__(self):
+        self._lock = threading.Lock()
+        self._frame = None
+        self._stopped = False
 
-    port = choose_midi_port()
-    th = threading.Thread(target=midi_worker, args=(port,), daemon=True)
-    th.start()
-    print(f"\nListening MIDI from: {port}")
+    def push(self, frame):
+        with self._lock:
+            self._frame = frame
 
-    cap = cv2.VideoCapture(cfg.cam_index, cv2.CAP_ANY)
+    def read(self):
+        with self._lock:
+            if self._frame is None:
+                return None
+            return self._frame.copy()
+
+    def stop(self):
+        with self._lock:
+            self._stopped = True
+
+    def stopped(self):
+        with self._lock:
+            return self._stopped
+
+
+def _camera_backend(cfg: RenderConfig):
+    if cfg.cam_force_native_backend and sys.platform == "darwin":
+        return cv2.CAP_AVFOUNDATION
+    return cv2.CAP_ANY
+
+
+def _open_camera(cfg: RenderConfig):
+    cap = cv2.VideoCapture(cfg.cam_index, _camera_backend(cfg))
     cap.set(cv2.CAP_PROP_BUFFERSIZE, cfg.cam_buffer_size)
     cap.set(cv2.CAP_PROP_FRAME_WIDTH, cfg.cam_width)
     cap.set(cv2.CAP_PROP_FRAME_HEIGHT, cfg.cam_height)
@@ -29,8 +51,46 @@ def run():
 
     ok, _ = cap.read()
     if not ok:
+        return None
+
+    actual_w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    actual_h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    actual_fps = cap.get(cv2.CAP_PROP_FPS)
+    backend_name = cap.getBackendName() if hasattr(cap, "getBackendName") else "unknown"
+    print(f"[CAM] backend={backend_name} requested={cfg.cam_width}x{cfg.cam_height}@{cfg.cam_fps} actual={actual_w}x{actual_h}@{actual_fps:.1f}")
+    return cap
+
+
+def _camera_reader(cap: cv2.VideoCapture, fb: LatestFrameBuffer):
+    while not fb.stopped():
+        ok, frame = cap.read()
+        if not ok:
+            time.sleep(0.002)
+            continue
+        fb.push(frame)
+
+
+def run():
+    cfg = RenderConfig()
+    state = RuntimeState()
+    renderer = Renderer(cfg, state)
+    renderer.enable_gpu_if_available()
+    cv2.setNumThreads(max(1, int(cfg.opencv_threads)))
+    print(f"[PERF] OpenCV threads={cv2.getNumThreads()}")
+
+    port = choose_midi_port()
+    th = threading.Thread(target=midi_worker, args=(port,), daemon=True)
+    th.start()
+    print(f"\nListening MIDI from: {port}")
+
+    cap = _open_camera(cfg)
+    if cap is None:
         print("Camera read failed.")
         return
+
+    frame_buffer = LatestFrameBuffer()
+    cam_th = threading.Thread(target=_camera_reader, args=(cap, frame_buffer), daemon=True)
+    cam_th.start()
 
     win = "Waterfall"
     cv2.namedWindow(win, cv2.WINDOW_NORMAL)
@@ -46,9 +106,10 @@ def run():
     high_fps_hits = 0
 
     while True:
-        ok, frame = cap.read()
-        if not ok:
-            break
+        frame = frame_buffer.read()
+        if frame is None:
+            time.sleep(0.001)
+            continue
 
         renderer.scroll_and_fade()
 
@@ -104,21 +165,26 @@ def run():
                 low_fps_hits = 0
                 high_fps_hits = 0
 
-            if low_fps_hits >= 2:
-                # Auto trade tiny quality for smoother frame rate.
-                cfg.deband_blur_every = min(4, cfg.deband_blur_every + 1)
-                cfg.particle_blur_every = min(6, cfg.particle_blur_every + 1)
-                cfg.line_glow_passes = max(1, cfg.line_glow_passes - 1)
-                cfg.firework_emit_count = max(8, int(cfg.firework_emit_count * 0.9))
-                low_fps_hits = 0
-                print(f"[PERF] fps={fps:.1f} -> deband_every={cfg.deband_blur_every}, part_blur_every={cfg.particle_blur_every}, glow_passes={cfg.line_glow_passes}, emit={cfg.firework_emit_count}")
-            elif high_fps_hits >= 3:
-                # Recover quality when sustained headroom exists.
-                cfg.deband_blur_every = max(1, cfg.deband_blur_every - 1)
-                cfg.particle_blur_every = max(2, cfg.particle_blur_every - 1)
-                cfg.line_glow_passes = min(3, cfg.line_glow_passes + 1)
-                cfg.firework_emit_count = min(20, int(cfg.firework_emit_count * 1.08) + 1)
-                high_fps_hits = 0
+            if not cfg.lock_max_quality:
+                if low_fps_hits >= 2:
+                    # Auto trade tiny quality for smoother frame rate.
+                    cfg.deband_blur_every = min(4, cfg.deband_blur_every + 1)
+                    cfg.particle_blur_every = min(6, cfg.particle_blur_every + 1)
+                    cfg.line_glow_passes = max(1, cfg.line_glow_passes - 1)
+                    cfg.firework_emit_count = max(8, int(cfg.firework_emit_count * 0.9))
+                    low_fps_hits = 0
+                    print(
+                        f"[PERF] fps={fps:.1f} -> deband_every={cfg.deband_blur_every}, "
+                        f"part_blur_every={cfg.particle_blur_every}, glow_passes={cfg.line_glow_passes}, "
+                        f"emit={cfg.firework_emit_count}"
+                    )
+                elif high_fps_hits >= 3:
+                    # Recover quality when sustained headroom exists.
+                    cfg.deband_blur_every = max(1, cfg.deband_blur_every - 1)
+                    cfg.particle_blur_every = max(2, cfg.particle_blur_every - 1)
+                    cfg.line_glow_passes = min(3, cfg.line_glow_passes + 1)
+                    cfg.firework_emit_count = min(20, int(cfg.firework_emit_count * 1.08) + 1)
+                    high_fps_hits = 0
 
         key = cv2.waitKey(1) & 0xFF
         if key == ord('q'):
@@ -169,6 +235,7 @@ def run():
 
         frame_count += 1
 
+    frame_buffer.stop()
     cap.release()
     cv2.destroyAllWindows()
 
