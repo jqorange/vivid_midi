@@ -92,8 +92,12 @@ def run():
     cam_th = threading.Thread(target=_camera_reader, args=(cap, frame_buffer), daemon=True)
     cam_th.start()
 
-    win = "Waterfall"
+    win = cfg.window_name
     cv2.namedWindow(win, cv2.WINDOW_NORMAL)
+    cv2.resizeWindow(win, int(cfg.window_width), int(cfg.window_height))
+    if cfg.window_fullscreen:
+        cv2.setWindowProperty(win, cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
+    print(f"[WIN] {cfg.window_width}x{cfg.window_height} fullscreen={cfg.window_fullscreen}")
 
     mouse_handler = lambda event, x, y, flags, param: renderer.handle_mouse(event, x, y)
     cv2.setMouseCallback(win, mouse_handler)
