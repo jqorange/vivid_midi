@@ -70,6 +70,30 @@ def _camera_reader(cap: cv2.VideoCapture, fb: LatestFrameBuffer):
         fb.push(frame)
 
 
+def _normalize_frame_to_output(frame, cfg: RenderConfig):
+    out_w = max(16, int(cfg.output_width))
+    out_h = max(9, int(cfg.output_height))
+
+    h, w = frame.shape[:2]
+    if cfg.auto_rotate_portrait and h > w:
+        frame = cv2.rotate(frame, cv2.ROTATE_90_CLOCKWISE)
+        h, w = frame.shape[:2]
+
+    target_ar = out_w / out_h
+    src_ar = w / h
+
+    if src_ar > target_ar:
+        crop_w = int(h * target_ar)
+        x0 = max(0, (w - crop_w) // 2)
+        frame = frame[:, x0:x0 + crop_w]
+    elif src_ar < target_ar:
+        crop_h = int(w / target_ar)
+        y0 = max(0, (h - crop_h) // 2)
+        frame = frame[y0:y0 + crop_h, :]
+
+    return cv2.resize(frame, (out_w, out_h), interpolation=cv2.INTER_AREA)
+
+
 def run():
     cfg = RenderConfig()
     state = RuntimeState()
@@ -98,6 +122,7 @@ def run():
     if cfg.window_fullscreen:
         cv2.setWindowProperty(win, cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
     print(f"[WIN] {cfg.window_width}x{cfg.window_height} fullscreen={cfg.window_fullscreen}")
+    print(f"[OUT] normalized={cfg.output_width}x{cfg.output_height} auto_rotate_portrait={cfg.auto_rotate_portrait}")
 
     mouse_handler = lambda event, x, y, flags, param: renderer.handle_mouse(event, x, y)
     cv2.setMouseCallback(win, mouse_handler)
@@ -114,6 +139,7 @@ def run():
         if frame is None:
             time.sleep(0.001)
             continue
+        frame = _normalize_frame_to_output(frame, cfg)
 
         renderer.scroll_and_fade()
 

@@ -12,12 +12,15 @@ class RenderConfig:
     cam_use_mjpg: bool = False
     cam_force_native_backend: bool = True
     lock_max_quality: bool = True
+    auto_rotate_portrait: bool = True
 
     # Main preview/output window (prefer 16:9 wide layout; use the highest stable mode your display supports).
     window_name: str = "Waterfall"
     window_fullscreen: bool = False
     window_width: int = 3840
     window_height: int = 2160
+    output_width: int = 1920
+    output_height: int = 1080
 
     # Mirror final frame to a dedicated full-screen window (typically moved to HDMI out).
     hdmi_forward: bool = False
